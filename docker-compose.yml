@@ -1,0 +1,57 @@
+# This is the file a SERVER would run (started with an explicit -f so it
+# does NOT auto-load docker-compose.override.yml — see that file's
+# comment). The only thing published here is "frontend" (port 8011) — the
+# dashboard is meant to be public; mongo and the raw api are not, and the
+# frontend's nginx reaches the api over the compose-internal network
+# instead of the browser calling it directly (see frontend/nginx.conf).
+#
+#   Laptop:  docker compose up -d --build     (auto-merges the override file)
+#   Server:  docker compose -f docker-compose.yml up -d --build
+services:
+  mongo:
+    image: mongo:7
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: sensor
+      MONGO_INITDB_ROOT_PASSWORD: sensor
+      MONGO_INITDB_DATABASE: sensor_analytics
+    volumes:
+      - mongodata:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "-u", "sensor", "-p", "sensor", "--authenticationDatabase", "admin", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build: .
+    environment:
+      MONGODB_URL: mongodb://sensor:sensor@mongo:27017/?authSource=admin
+      MONGODB_DB_NAME: sensor_analytics
+      # Only matters if something calls the api directly cross-origin
+      # (e.g. `npm run dev`'s hot-reload server, see frontend/README).
+      # The dockerized frontend below doesn't need this at all — its
+      # nginx proxies /api same-origin, so the browser never sees CORS.
+      CORS_ALLOWED_ORIGINS: http://localhost:5173,http://localhost:5174
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      # VITE_API_URL=/api is baked into the built JS at image-build time
+      # (Vite env vars are build-time, not runtime) and matches
+      # frontend/nginx.conf's /api/ proxy — the browser always calls its
+      # own origin, nginx forwards to the api container internally.
+      args:
+        VITE_API_URL: /api
+    depends_on:
+      - api
+    ports:
+      - "8011:80"
+    restart: unless-stopped
+
+volumes:
+  mongodata:

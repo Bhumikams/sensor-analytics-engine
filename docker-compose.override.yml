@@ -1,0 +1,17 @@
+# Auto-loaded by `docker compose ...` whenever you run it WITHOUT an
+# explicit -f flag — i.e. on your own laptop. It's what gives you direct
+# access to Mongo and the API while developing (mongosh/Compass on 27018,
+# the API on 8010). Ports are offset from the feed-engine project's
+# (8000/5433/6380) so the two can run side by side without clashing.
+#
+# A server starts the base file with an explicit -f, which turns OFF this
+# auto-load, so none of this is reachable from the internet in production
+# — see the feed-engine project's DEPLOY.md for the same pattern applied
+# end to end, if you deploy this one too.
+services:
+  mongo:
+    ports:
+      - "27018:27017"
+  api:
+    ports:
+      - "8010:8000"
